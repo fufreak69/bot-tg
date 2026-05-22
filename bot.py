@@ -268,7 +268,8 @@ def main():
     )
     app.add_handler(conv)
     logger.info("🤖 Бот запущен!")
-    app.run_polling(drop_pending_updates=True)
+    import asyncio
+    asyncio.run(app.run_polling(drop_pending_updates=True))
  
 if __name__ == "__main__":
     main()
