@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -8,10 +9,7 @@ from telegram.ext import (
 from google import genai
 from google.genai import types
  
-logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    level=logging.INFO,
-)
+logging.basicConfig(format="%(asctime)s | %(levelname)s | %(name)s | %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
  
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -28,7 +26,7 @@ SYSTEM_PROMPT = """Ты — профессиональный академиче�
  
 (STATE_MENU, STATE_WORK_TYPE, STATE_TOPIC, STATE_DETAILS, STATE_GENERATING, STATE_CHAT) = range(6)
  
-user_data_store: dict[int, dict] = {}
+user_data_store: dict = {}
  
 WORK_TYPES = {
     "course":  "📚 Курсовая работа",
@@ -46,12 +44,9 @@ SECTIONS = {
     "report":  ["Введение", "Описание места практики", "Выполненные задания", "Анализ деятельности", "Заключение"],
 }
  
-def get_user(uid: int) -> dict:
+def get_user(uid):
     if uid not in user_data_store:
-        user_data_store[uid] = {
-            "work_type": None, "topic": None, "details": None,
-            "history": [], "generated_sections": {},
-        }
+        user_data_store[uid] = {"work_type": None, "topic": None, "details": None, "history": [], "generated_sections": {}}
     return user_data_store[uid]
  
 def main_menu_keyboard():
@@ -66,7 +61,7 @@ def work_type_keyboard():
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_menu")])
     return InlineKeyboardMarkup(buttons)
  
-def sections_keyboard(work_type: str, generated: set):
+def sections_keyboard(work_type, generated):
     sections = SECTIONS.get(work_type, [])
     buttons = []
     for i, sec in enumerate(sections):
@@ -77,7 +72,7 @@ def sections_keyboard(work_type: str, generated: set):
     buttons.append([InlineKeyboardButton("🔄 Начать заново", callback_data="back_menu")])
     return InlineKeyboardMarkup(buttons)
  
-def split_text(text: str, max_len: int = 4000) -> list:
+def split_text(text, max_len=4000):
     if len(text) <= max_len:
         return [text]
     chunks = []
@@ -92,7 +87,7 @@ def split_text(text: str, max_len: int = 4000) -> list:
         text = text[split_at:].lstrip()
     return chunks
  
-def gemini_generate(prompt: str) -> str:
+def gemini_generate(prompt):
     response = client.models.generate_content(
         model="gemini-2.0-flash",
         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
@@ -100,7 +95,7 @@ def gemini_generate(prompt: str) -> str:
     )
     return response.text
  
-def gemini_chat_reply(history: list, message: str, context_info: str = "") -> str:
+def gemini_chat_reply(history, message, context_info=""):
     system = SYSTEM_PROMPT + context_info
     contents = []
     for msg in history[-8:]:
@@ -157,8 +152,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"⏳ Генерирую: {section_name}...\n\nЭто займёт 15–30 секунд.")
         prompt = (
             f"Напиши раздел «{section_name}» для {WORK_TYPES[user['work_type']]}.\n"
-            f"Тема: {user['topic']}\n"
-            f"Детали: {user['details'] or 'не указаны'}\n\n"
+            f"Тема: {user['topic']}\nДетали: {user['details'] or 'не указаны'}\n\n"
             f"Минимум 500 слов, с подзаголовками, академическим языком."
         )
         try:
@@ -250,7 +244,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Главное меню:", reply_markup=main_menu_keyboard())
     return STATE_MENU
  
-def main():
+async def main():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     app = Application.builder().token(token).build()
     conv = ConversationHandler(
@@ -268,9 +262,7 @@ def main():
     )
     app.add_handler(conv)
     logger.info("🤖 Бот запущен!")
-    import asyncio
-    asyncio.run(app.run_polling(drop_pending_updates=True))
+    await app.run_polling(drop_pending_updates=True)
  
 if __name__ == "__main__":
-    main()
- 
+    asyncio.run(main())
